@@ -25,8 +25,8 @@ class Memo {
     const int dl = event->GetDeadline();
 
     auto rank_of = [](const Event* ev)->int{
-      if (dynamic_cast<const NormalEvent*>(ev)) return 0; // Normal first
-      if (dynamic_cast<const NotifyBeforeEvent*>(ev)) return 1; // then pre-reminders
+      if (dynamic_cast<const NotifyBeforeEvent*>(ev)) return 0; // pre-reminders first
+      if (dynamic_cast<const NormalEvent*>(ev)) return 1; // then normal
       if (dynamic_cast<const NotifyLateEvent*>(ev)) return 2; // then late
       return 3;
     };

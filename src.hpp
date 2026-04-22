@@ -24,16 +24,17 @@ class Memo {
     if (!event) return;
     const int dl = event->GetDeadline();
 
-    auto rank_of = [](const Event* ev)->int{
-      if (dynamic_cast<const NotifyBeforeEvent*>(ev)) return 0; // pre-reminders first
-      if (dynamic_cast<const NormalEvent*>(ev)) return 1; // then normal
-      if (dynamic_cast<const NotifyLateEvent*>(ev)) return 2; // then late
-      return 3;
-    };
-    int r = rank_of(event);
-
     auto push_item = [&](int t, int n){
-      if (t > current_ && t >= 1 && t <= duration_) schedule_[t].push_back({event, n, r, seq_});
+      if (!(t > current_ && t >= 1 && t <= duration_)) return;
+      int rank = 4;
+      if (dynamic_cast<const NotifyBeforeEvent*>(event)) {
+        rank = (n == 0 ? 0 : 2); // pre first, then final
+      } else if (dynamic_cast<const NormalEvent*>(event)) {
+        rank = 1; // normal between pre and final
+      } else if (dynamic_cast<const NotifyLateEvent*>(event)) {
+        rank = 3; // late after others
+      }
+      schedule_[t].push_back({event, n, rank, seq_});
     };
 
     // Custom late event
@@ -60,7 +61,7 @@ class Memo {
 
     // Notify before event
     if (auto nbe = dynamic_cast<const NotifyBeforeEvent*>(event)) {
-      int pre_t = dl - nbe->GetNotifyTime();
+      int pre_t = dl - nbe->GetNotifyTime() + 1;
       if (pre_t <= current_) pre_t = current_ + 1;
       push_item(pre_t, 0);
       push_item(dl, 1);

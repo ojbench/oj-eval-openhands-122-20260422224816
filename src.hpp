@@ -28,9 +28,9 @@ class Memo {
       if (!(t > current_ && t >= 1 && t <= duration_)) return;
       int rank = 4;
       if (dynamic_cast<const NotifyBeforeEvent*>(event)) {
-        rank = (n == 0 ? 0 : 2); // pre first, then final
+        rank = (n == 0 ? 0 : 1); // pre first, then final
       } else if (dynamic_cast<const NormalEvent*>(event)) {
-        rank = 1; // normal between pre and final
+        rank = 2; // normal after notify-before (pre and final)
       } else if (dynamic_cast<const NotifyLateEvent*>(event)) {
         rank = 3; // late after others
       }
@@ -62,7 +62,9 @@ class Memo {
     // Notify before event
     if (auto nbe = dynamic_cast<const NotifyBeforeEvent*>(event)) {
       int pre_t = dl - nbe->GetNotifyTime() + 1;
-      push_item(pre_t, 0);
+      if (pre_t < dl) {
+        push_item(pre_t, 0);
+      }
       push_item(dl, 1);
       ++seq_;
       return;

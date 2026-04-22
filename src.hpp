@@ -26,15 +26,7 @@ class Memo {
 
     auto push_item = [&](int t, int n){
       if (!(t > current_ && t >= 1 && t <= duration_)) return;
-      int rank = 4;
-      if (dynamic_cast<const NotifyBeforeEvent*>(event)) {
-        rank = (n == 0 ? 0 : 1); // pre first, then final
-      } else if (dynamic_cast<const NormalEvent*>(event)) {
-        rank = 2; // normal after notify-before (pre and final)
-      } else if (dynamic_cast<const NotifyLateEvent*>(event)) {
-        rank = 3; // late after others
-      }
-      schedule_[t].push_back({event, n, rank, seq_});
+      schedule_[t].push_back({event, n, seq_});
     };
 
     // Custom late event
@@ -84,11 +76,17 @@ class Memo {
     auto it = schedule_.find(current_);
     if (it == schedule_.end()) return;
     auto &vec = it->second;
-    std::sort(vec.begin(), vec.end(), [](const Item &a, const Item &b){
-      if (a.rank != b.rank) return a.rank < b.rank;
-      if (a.seq != b.seq) return a.seq < b.seq;
-      if (a.ev == b.ev) return a.n < b.n; // ensure pre (n=0) before final (n=1) for same event
-      return false;
+    std::stable_sort(vec.begin(), vec.end(), [](const Item &a, const Item &b){
+      auto kind = [](const Item &x){
+        if (dynamic_cast<const NotifyBeforeEvent*>(x.ev)) return (x.n == 0 ? 0 : 1);
+        if (dynamic_cast<const NormalEvent*>(x.ev)) return 2;
+        if (dynamic_cast<const NotifyLateEvent*>(x.ev)) return 3;
+        return 4;
+      };
+      int ka = kind(a), kb = kind(b);
+      if (ka != kb) return ka < kb;
+      if (a.ev == b.ev) return a.n < b.n; // for same event, pre before final
+      return false; // otherwise keep insertion order
     });
     for (auto &p : vec) {
       const Event *ev = p.ev;
@@ -102,7 +100,6 @@ class Memo {
   struct Item {
     const Event* ev;
     int n;
-    int rank;
     long long seq;
   };
   int duration_;

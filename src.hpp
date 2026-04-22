@@ -61,7 +61,6 @@ class Memo {
     // Notify before event
     if (auto nbe = dynamic_cast<const NotifyBeforeEvent*>(event)) {
       int pre_t = dl - nbe->GetNotifyTime();
-      if (pre_t <= current_) pre_t = current_ + 1;
       push_item(pre_t, 0);
       push_item(dl, 1);
       ++seq_;
@@ -84,7 +83,9 @@ class Memo {
     auto &vec = it->second;
     std::sort(vec.begin(), vec.end(), [](const Item &a, const Item &b){
       if (a.rank != b.rank) return a.rank < b.rank;
-      return a.seq < b.seq;
+      if (a.seq != b.seq) return a.seq < b.seq;
+      if (a.ev == b.ev) return a.n < b.n; // ensure pre (n=0) before final (n=1) for same event
+      return false;
     });
     for (auto &p : vec) {
       const Event *ev = p.ev;

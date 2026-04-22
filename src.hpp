@@ -61,7 +61,7 @@ class Memo {
 
     // Notify before event
     if (auto nbe = dynamic_cast<const NotifyBeforeEvent*>(event)) {
-      int pre_t = dl - nbe->GetNotifyTime();
+      int pre_t = dl - nbe->GetNotifyTime() + 1;
       push_item(pre_t, 0);
       push_item(dl, 1);
       ++seq_;

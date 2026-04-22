@@ -16,7 +16,7 @@ class Memo {
   Memo() = delete;
 
   // simulate hours [1..duration]
-  explicit Memo(int duration) : duration_(duration), current_(0) {}
+  explicit Memo(int duration) : duration_(duration), current_(0), seq_(0) {}
 
   ~Memo() = default; // Non-owning pointers
 
@@ -24,45 +24,53 @@ class Memo {
     if (!event) return;
     const int dl = event->GetDeadline();
 
+    auto rank_of = [](const Event* ev)->int{
+      if (dynamic_cast<const NotifyBeforeEvent*>(ev)) return 0; // highest priority
+      if (dynamic_cast<const NormalEvent*>(ev)) return 1;
+      if (dynamic_cast<const NotifyLateEvent*>(ev)) return 2;
+      return 3;
+    };
+    int r = rank_of(event);
+
+    auto push_item = [&](int t, int n){
+      if (t > current_ && t >= 1 && t <= duration_) schedule_[t].push_back({event, n, r, seq_});
+    };
+
     // Custom late event
     if (auto cle = dynamic_cast<const CustomNotifyLateEvent*>(event)) {
       const int freq = cle->GetFrequency();
-      if (dl > current_ && dl <= duration_) schedule_[dl].push_back({event, 0});
+      push_item(dl, 0);
       if (freq > 0) {
-        for (long long t = 1LL * dl + freq, k = 1; t <= duration_; t += freq, ++k) {
-          if (t > current_) schedule_[(int)t].push_back({event, (int)k});
-        }
+        for (long long t = 1LL * dl + freq, k = 1; t <= duration_; t += freq, ++k) push_item((int)t, (int)k);
       }
+      ++seq_;
       return;
     }
 
     // Late event
     if (auto le = dynamic_cast<const NotifyLateEvent*>(event)) {
       const int freq = le->GetFrequency();
-      if (dl > current_ && dl <= duration_) schedule_[dl].push_back({event, 0});
+      push_item(dl, 0);
       if (freq > 0) {
-        for (long long t = 1LL * dl + freq, k = 1; t <= duration_; t += freq, ++k) {
-          if (t > current_) schedule_[(int)t].push_back({event, (int)k});
-        }
+        for (long long t = 1LL * dl + freq, k = 1; t <= duration_; t += freq, ++k) push_item((int)t, (int)k);
       }
+      ++seq_;
       return;
     }
 
     // Notify before event
     if (auto nbe = dynamic_cast<const NotifyBeforeEvent*>(event)) {
-      int pre_t = dl - nbe->GetNotifyTime();
-      if (pre_t > current_ && pre_t >= 1 && pre_t <= duration_) {
-        schedule_[pre_t].push_back({event, 0});
-      }
-      if (dl > current_ && dl <= duration_) {
-        schedule_[dl].push_back({event, 1});
-      }
+      int pre_t = dl - nbe->GetNotifyTime() + 1;
+      push_item(pre_t, 0);
+      push_item(dl, 1);
+      ++seq_;
       return;
     }
 
     // Normal event
     if (dynamic_cast<const NormalEvent*>(event)) {
-      if (dl > current_ && dl <= duration_) schedule_[dl].push_back({event, 0});
+      push_item(dl, 0);
+      ++seq_;
       return;
     }
   }
@@ -72,18 +80,30 @@ class Memo {
     ++current_;
     auto it = schedule_.find(current_);
     if (it == schedule_.end()) return;
-    for (auto &p : it->second) {
-      const Event *ev = p.first;
-      int n = p.second;
+    auto &vec = it->second;
+    std::sort(vec.begin(), vec.end(), [](const Item &a, const Item &b){
+      if (a.rank != b.rank) return a.rank < b.rank;
+      return a.seq < b.seq;
+    });
+    for (auto &p : vec) {
+      const Event *ev = p.ev;
+      int n = p.n;
       if (!ev || ev->IsComplete()) continue;
       std::cout << ev->GetNotification(n) << std::endl;
     }
   }
 
  private:
+  struct Item {
+    const Event* ev;
+    int n;
+    int rank;
+    long long seq;
+  };
   int duration_;
   int current_;
-  std::unordered_map<int, std::vector<std::pair<const Event*, int>>> schedule_;
+  long long seq_;
+  std::unordered_map<int, std::vector<Item>> schedule_;
 };
 
 #endif // SRC_HPP

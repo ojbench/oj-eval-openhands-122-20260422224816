@@ -6,11 +6,8 @@
 
 // Implement CustomNotifyLateEvent::GetNotification exactly as specified
 inline std::string CustomNotifyLateEvent::GetNotification(int n) const {
-  // 1) Call base class implementation
   std::string base = NotifyLateEvent::GetNotification(n);
-  // 2) Call generator to get custom message
   std::string extra = generator_(n);
-  // 3) Concatenate and return
   return base + extra;
 }
 
@@ -21,78 +18,72 @@ class Memo {
   // simulate hours [1..duration]
   explicit Memo(int duration) : duration_(duration), current_(0) {}
 
-  ~Memo() = default; // We do not own the Event pointers; caller manages their lifetime
+  ~Memo() = default; // Non-owning pointers
 
   void AddEvent(const Event *event) {
-    events_.push_back(event); // non-owning
+    if (!event) return;
+    const int dl = event->GetDeadline();
+
+    // Custom late event
+    if (auto cle = dynamic_cast<const CustomNotifyLateEvent*>(event)) {
+      const int freq = cle->GetFrequency();
+      if (dl > current_ && dl <= duration_) schedule_[dl].push_back({event, 0});
+      if (freq > 0) {
+        for (long long t = 1LL * dl + freq, k = 1; t <= duration_; t += freq, ++k) {
+          if (t > current_) schedule_[(int)t].push_back({event, (int)k});
+        }
+      }
+      return;
+    }
+
+    // Late event
+    if (auto le = dynamic_cast<const NotifyLateEvent*>(event)) {
+      const int freq = le->GetFrequency();
+      if (dl > current_ && dl <= duration_) schedule_[dl].push_back({event, 0});
+      if (freq > 0) {
+        for (long long t = 1LL * dl + freq, k = 1; t <= duration_; t += freq, ++k) {
+          if (t > current_) schedule_[(int)t].push_back({event, (int)k});
+        }
+      }
+      return;
+    }
+
+    // Notify before event
+    if (auto nbe = dynamic_cast<const NotifyBeforeEvent*>(event)) {
+      int pre_t = dl - nbe->GetNotifyTime() + 1; // per sample behavior
+      if (pre_t > current_ && pre_t >= 1 && pre_t <= duration_) {
+        schedule_[pre_t].push_back({event, 0});
+      }
+      if (dl > current_ && dl <= duration_) {
+        schedule_[dl].push_back({event, 1});
+      }
+      return;
+    }
+
+    // Normal event
+    if (dynamic_cast<const NormalEvent*>(event)) {
+      if (dl > current_ && dl <= duration_) schedule_[dl].push_back({event, 0});
+      return;
+    }
   }
 
   void Tick() {
-    if (current_ >= duration_) return; // nothing to do beyond planned duration
+    if (current_ >= duration_) return;
     ++current_;
-
-    for (const Event *ev : events_) {
+    auto it = schedule_.find(current_);
+    if (it == schedule_.end()) return;
+    for (auto &p : it->second) {
+      const Event *ev = p.first;
+      int n = p.second;
       if (!ev || ev->IsComplete()) continue;
-
-      int dl = ev->GetDeadline();
-      // Custom late event first (is-a NotifyLateEvent)
-      if (auto cle = dynamic_cast<const CustomNotifyLateEvent*>(ev)) {
-        int freq = cle->GetFrequency();
-        if (current_ == dl) {
-          std::cout << cle->GetNotification(0) << std::endl;
-        } else if (current_ > dl && freq > 0) {
-          int delta = current_ - dl;
-          if (delta % freq == 0) {
-            int n = delta / freq; // n >= 1
-            std::cout << cle->GetNotification(n) << std::endl;
-          }
-        }
-        continue;
-      }
-
-      // Late event
-      if (auto le = dynamic_cast<const NotifyLateEvent*>(ev)) {
-        int freq = le->GetFrequency();
-        if (current_ == dl) {
-          std::cout << le->GetNotification(0) << std::endl;
-        } else if (current_ > dl && freq > 0) {
-          int delta = current_ - dl;
-          if (delta % freq == 0) {
-            int n = delta / freq; // n >= 1
-            std::cout << le->GetNotification(n) << std::endl;
-          }
-        }
-        continue;
-      }
-
-      // Notify before event
-      if (auto nbe = dynamic_cast<const NotifyBeforeEvent*>(ev)) {
-        int pre_t = dl - nbe->GetNotifyTime() + 1; // schedule rule inferred from sample
-        if (current_ == pre_t) {
-          std::cout << nbe->GetNotification(0) << std::endl;
-        }
-        if (current_ == dl) {
-          std::cout << nbe->GetNotification(1) << std::endl;
-        }
-        continue;
-      }
-
-      // Normal event
-      if (dynamic_cast<const NormalEvent*>(ev)) {
-        if (current_ == dl) {
-          std::cout << ev->GetNotification(0) << std::endl;
-        }
-        continue;
-      }
-
-      // Fallback: if some unknown derived type appears, do nothing
+      std::cout << ev->GetNotification(n) << std::endl;
     }
   }
 
  private:
   int duration_;
   int current_;
-  std::vector<const Event*> events_;
+  std::unordered_map<int, std::vector<std::pair<const Event*, int>>> schedule_;
 };
 
 #endif // SRC_HPP
